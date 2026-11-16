@@ -1,37 +1,25 @@
 
 import { prisma } from "../config/prisma.js";
+import { AppError } from "../config/erro.js";
 
 import { criarCategoriasPadrao } from "./categoria.model.js";
 import { criarFonteDestinoPadrao } from "./fonte-destino.model.js";
 
-// Campos públicos do usuário.
-// A senha nunca deve ser retornada pela API.
 const USUARIO_PUBLICO_SELECT = {
     id: true,
     nome: true,
     email: true,
-    cpf: true,
     criadoEm: true
 };
 
-// Normaliza CPF, mantendo somente os dígitos.
+// Remove a máscara do CPF.
 function normalizarCpf(cpf) {
-    return String(cpf).replace(/\D/g, "");
+    return String(cpf ?? "").replace(/\D/g, "");
 }
 
-// Normaliza e-mail.
+// Normaliza o e-mail.
 function normalizarEmail(email) {
-    return String(email).trim().toLowerCase();
-}
-
-// Cria erros de validação que poderão ser tratados pelas rotas.
-function erroValidacao(mensagem, campo) {
-    const erro = new Error(mensagem);
-
-    erro.code = "VALIDATION_ERROR";
-    erro.campo = campo;
-
-    return erro;
+    return String(email ?? "").trim().toLowerCase();
 }
 
 // Valida os dígitos verificadores do CPF.
@@ -63,27 +51,30 @@ export function cpfValido(cpf) {
     );
 }
 
-// Busca um usuário pelo e-mail.
+// Busca usuário pelo e-mail, incluindo o hash da senha.
+// Essa função é de uso interno para autenticação.
 export async function buscarCredenciaisPorEmail(email) {
-    const emailNormalizado = normalizarEmail(email);
-
     return prisma.usuario.findUnique({
         where: {
-            email: emailNormalizado
+            email: normalizarEmail(email)
         },
         select: {
-            ...USUARIO_PUBLICO_SELECT,
+            id: true,
+            nome: true,
+            email: true,
             senhaHash: true
         }
     });
 }
 
-// Busca os dados públicos de um usuário pelo ID.
+// Busca os dados públicos do usuário pelo ID.
 export async function buscarUsuarioPorId(id) {
     const usuarioId = Number(id);
 
     if (!Number.isInteger(usuarioId) || usuarioId <= 0) {
-        throw erroValidacao("ID de usuário inválido.", "id");
+        throw new AppError(400, "ID de usuário inválido.", {
+            id: "Informe um ID válido."
+        });
     }
 
     return prisma.usuario.findUnique({
@@ -94,60 +85,123 @@ export async function buscarUsuarioPorId(id) {
     });
 }
 
-// Cadastra um usuário e cria seus dados iniciais.
-// Todas as operações são realizadas na mesma transação.
+// Cadastra usuário e cria seus registros iniciais.
 export async function criarUsuario(dados) {
     const nome = String(dados.nome ?? "").trim();
-    const email = normalizarEmail(dados.email ?? "");
-    const cpf = normalizarCpf(dados.cpf ?? "");
+    const email = normalizarEmail(dados.email);
+    const cpf = normalizarCpf(dados.cpf);
     const senhaHash = dados.senhaHash;
 
-    if (!nome) {
-        throw erroValidacao("Nome é obrigatório.", "nome");
+    const campos = {};
+
+    if (!nome || nome.length > 120) {
+        campos.nome = "Informe um nome de até 120 caracteres.";
     }
 
-    if (nome.length > 120) {
-        throw erroValidacao("Nome deve ter até 120 caracteres.", "nome");
-    }
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        throw erroValidacao("E-mail inválido.", "email");
-    }
-
-    if (email.length > 160) {
-        throw erroValidacao("E-mail deve ter até 160 caracteres.", "email");
+    if (
+        !email ||
+        email.length > 160 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+        campos.email = "Informe um e-mail válido.";
     }
 
     if (!cpfValido(cpf)) {
-        throw erroValidacao("CPF inválido.", "cpf");
+        campos.cpf = "Informe um CPF válido.";
     }
 
-    if (!senhaHash || typeof senhaHash !== "string") {
-        throw erroValidacao("Hash da senha é obrigatório.", "senha");
+    if (
+        typeof senhaHash !== "string" ||
+        !senhaHash ||
+        senhaHash.length > 100
+    ) {
+        campos.senha = "Hash da senha inválido.";
     }
 
-    if (senhaHash.length > 100) {
-        throw erroValidacao("Hash da senha excede o limite permitido.", "senha");
+    if (Object.keys(campos).length > 0) {
+        throw new AppError(400, "Dados inválidos.", campos);
     }
 
-    return prisma.$transaction(async (tx) => {
-        // 1. Cria o usuário.
-        const usuario = await tx.usuario.create({
-            data: {
-                nome,
-                email,
-                cpf,
-                senhaHash
-            },
-            select: USUARIO_PUBLICO_SELECT
+    // Verificação prévia para fornecer mensagens específicas.
+    // A garantia definitiva continua sendo a restrição UNIQUE.
+    const [emailExistente, cpfExistente] = await Promise.all([
+        prisma.usuario.findUnique({
+            where: { email },
+            select: { id: true }
+        }),
+
+        prisma.usuario.findUnique({
+            where: { cpf },
+            select: { id: true }
+        })
+    ]);
+
+    const duplicados = {};
+
+    if (emailExistente) {
+        duplicados.email = "Este e-mail já está cadastrado.";
+    }
+
+    if (cpfExistente) {
+        duplicados.cpf = "Este CPF já está cadastrado.";
+    }
+
+    if (Object.keys(duplicados).length > 0) {
+        throw new AppError(
+            409,
+            "Usuário já cadastrado.",
+            duplicados
+        );
+    }
+
+    try {
+        return await prisma.$transaction(async (tx) => {
+            // 1. Cria o usuário.
+            const usuario = await tx.usuario.create({
+                data: {
+                    nome,
+                    email,
+                    cpf,
+                    senhaHash
+                },
+                select: USUARIO_PUBLICO_SELECT
+            });
+
+            // 2. Cria as categorias iniciais.
+            await criarCategoriasPadrao(usuario.id, tx);
+
+            // 3. Cria a fonte/destino inicial.
+            await criarFonteDestinoPadrao(usuario.id, tx);
+
+            return usuario;
         });
+    } catch (erro) {
+        // Trata também duplicidades causadas por requisições simultâneas.
+        if (erro.code === "P2002") {
+            const alvo = Array.isArray(erro.meta?.target)
+                ? erro.meta.target.join(" ").toLowerCase()
+                : String(erro.meta?.target ?? "").toLowerCase();
 
-        // 2. Cria as categorias padrão.
-        await criarCategoriasPadrao(usuario.id, tx);
+            const camposDuplicados = {};
 
-        // 3. Cria uma fonte/destino padrão.
-        await criarFonteDestinoPadrao(usuario.id, tx);
+            if (alvo.includes("email")) {
+                camposDuplicados.email =
+                    "Este e-mail já está cadastrado.";
+            } else if (alvo.includes("cpf")) {
+                camposDuplicados.cpf =
+                    "Este CPF já está cadastrado.";
+            } else {
+                camposDuplicados.registro =
+                    "Já existe um usuário com esses dados.";
+            }
 
-        return usuario;
-    });
+            throw new AppError(
+                409,
+                "Usuário já cadastrado.",
+                camposDuplicados
+            );
+        }
+
+        throw erro;
+    }
 }
