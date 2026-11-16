@@ -1,15 +1,21 @@
-const express = require('express');
-
-// Rotas
-const authRoutes = require('./routes/auth');
-const categoriaRoutes = require('./routes/categoria');
-const fontesDestinosRoutes = require('./routes/fontes-destinos');
-const lancamentosRoutes = require('./routes/lancamentos');
-const relatoriosRoutes = require('./routes/relatorios');
-const saudeFinanceiraRoutes = require('./routes/saude-financeira');
+import dotenv from 'dotenv';
+import express from 'express';
+import { prisma } from './config/prisma.js';
 
 const app = express();
+const PORT = 3000;
+
 app.use(express.json());
+
+dotenv.config();
+
+// Rotas
+import authRoutes from './routes/auth.js';
+import categoriaRoutes from './routes/categoria.js';
+import fontesDestinosRoutes from './routes/fontes-destinos.js';
+import lancamentosRoutes from './routes/lancamentos.js';
+import relatoriosRoutes from './routes/relatorios.js';
+import saudeFinanceiraRoutes from './routes/saude-financeira.js';
 
 app.use('/auth', authRoutes);
 app.use('/categorias', categoriaRoutes);
@@ -18,6 +24,25 @@ app.use('/lancamentos', lancamentosRoutes);
 app.use('/relatorios', relatoriosRoutes);
 app.use('/saude-financeira', saudeFinanceiraRoutes);
 
-app.listen(3000, () => {
-  console.log('Servidor Express executando na porta 3000');
-});
+startServer();
+
+
+
+async function startServer() {
+    try {
+        await prisma.$connect();
+
+        const result = await prisma.$queryRaw`SELECT 1 AS conectado`;
+
+        console.log('Prisma conectado ao PostgreSQL!');
+        console.log(result);
+
+        app.listen(PORT, () => {
+            console.log(`Servidor Express executando na porta ${PORT}`);
+        });
+
+    } catch (error) {
+        console.error('Erro ao conectar ao PostgreSQL:', error.message);
+        process.exit(1);
+    }
+}
