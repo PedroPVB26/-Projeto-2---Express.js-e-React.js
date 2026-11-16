@@ -4,11 +4,103 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider               = "prisma-client"
-  output                 = "../src/generated/prisma"
-  importFileExtension    = "ts"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  importFileExtension = "ts"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+// ======================================================
+// USUARIOS
+// ======================================================
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  nome      String   @db.VarChar(120)
+  email     String   @unique @db.VarChar(160)
+  cpf       String   @unique @db.Char(11)
+  senhaHash String   @map("senha_hash") @db.VarChar(100)
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamp(6)
+
+  // Relacionamentos
+  categorias     Categoria[]
+  fontesDestinos FonteDestino[]
+  lancamentos    Lancamento[]
+
+  @@map("usuarios")
+}
+
+// ======================================================
+// CATEGORIAS
+// ======================================================
+
+model Categoria {
+  id        Int    @id @default(autoincrement())
+  usuarioId Int    @map("usuario_id")
+  nome      String @db.VarChar(60)
+  tipo      String @db.VarChar(7)
+
+  // Relacionamentos
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  lancamentos Lancamento[]
+
+  // Um usuário não pode repetir nome e tipo
+  @@unique([usuarioId, nome, tipo])
+  @@map("categorias")
+}
+
+// ======================================================
+// FONTES E DESTINOS
+// ======================================================
+
+model FonteDestino {
+  id            Int      @id @default(autoincrement())
+  usuarioId     Int      @map("usuario_id")
+  nome          String   @db.VarChar(60)
+  tipo          String   @db.VarChar(14)
+  diaFechamento Int?     @map("dia_fechamento") @db.SmallInt
+  diaVencimento Int?     @map("dia_vencimento") @db.SmallInt
+  limite        Decimal? @db.Decimal(12, 2)
+
+  // Relacionamentos
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  lancamentos Lancamento[]
+
+  // Um usuário não pode repetir o nome da fonte/destino
+  @@unique([usuarioId, nome])
+  @@map("fontes_destinos")
+}
+
+// ======================================================
+// LANCAMENTOS
+// ======================================================
+
+model Lancamento {
+  id                Int      @id @default(autoincrement())
+  usuarioId         Int      @map("usuario_id")
+  tipo              String   @db.VarChar(7)
+  descricao         String   @db.VarChar(120)
+  valor             Decimal  @db.Decimal(12, 2)
+  data              DateTime @db.Date
+  categoriaId       Int      @map("categoria_id")
+  fonteDestinoId    Int      @map("fonte_destino_id")
+  parcelaAtual      Int      @default(1) @map("parcela_atual") @db.SmallInt
+  totalParcelas     Int      @default(1) @map("total_parcelas") @db.SmallInt
+  grupoParcelamento String?  @map("grupo_parcelamento") @db.Uuid
+  criadoEm          DateTime @default(now()) @map("criado_em") @db.Timestamp(6)
+
+  // Relacionamentos
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Não permitir excluir categoria ou fonte/destino vinculados
+  categoria Categoria @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+
+  fonteDestino FonteDestino @relation(fields: [fonteDestinoId], references: [id], onDelete: Restrict)
+
+  // Índice exigido no DDL da professora
+  @@index([usuarioId, data], map: "idx_lancamentos_usuario_data")
+  @@map("lancamentos")
 }
