@@ -11,7 +11,6 @@ import categoriaRoutes from './routes/categoria.js';
 import fontesDestinosRoutes from './routes/fontes-destinos.js';
 import lancamentosRoutes from './routes/lancamentos.js';
 import relatoriosRoutes from './routes/relatorios.js';
-import saudeFinanceiraRoutes from './routes/saude-financeira.js';
 
 import {rotaNaoEncontrada, tratarErros} from './middlewares/erro.middleware.js';
 
@@ -37,7 +36,6 @@ app.use('/api/categorias', categoriaRoutes);
 app.use('/api/fontes-destinos', fontesDestinosRoutes);
 app.use('/api/lancamentos', lancamentosRoutes);
 app.use('/api/relatorios', relatoriosRoutes);
-app.use('/api/saude-financeira', saudeFinanceiraRoutes);
 
 // ======================================================
 // TRATAMENTO DE ROTAS E ERROS
