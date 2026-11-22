@@ -8,3 +8,4 @@
 - *bcrypt*: hash e comparação de senhas
 - *jsonwebtoken*: Geração e validação de JWT
 - *express-rate-limit*: Limitar tentativas de login
+- *cors*: CORS

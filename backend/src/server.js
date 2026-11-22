@@ -2,6 +2,7 @@
 import 'dotenv/config';
 
 import express from 'express';
+import cors from 'cors';
 import { prisma } from './config/prisma.js';
 
 // Rotas
@@ -12,14 +13,19 @@ import lancamentosRoutes from './routes/lancamentos.js';
 import relatoriosRoutes from './routes/relatorios.js';
 import saudeFinanceiraRoutes from './routes/saude-financeira.js';
 
-// Middlewares de tratamento de erros
-import {
-    rotaNaoEncontrada,
-    tratarErros
-} from './middlewares/erro.middleware.js';
+import {rotaNaoEncontrada, tratarErros} from './middlewares/erro.middleware.js';
+
+
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+app.use(cors({
+    origin: 'http://localhost:5173',
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 
 app.use(express.json());
 
