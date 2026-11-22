@@ -3,6 +3,9 @@
 Aplicação full stack de controle financeiro pessoal, construída com Node.js/Express,
 PostgreSQL/Prisma e React/Vite.
 
+## Apresentação:
+[Link da apresentação](https://drive.google.com/file/d/1wbQ0Z0lgrTskzuXreR9gH9PIrnxcUYA5/view?usp=sharing)
+
 ## Estrutura
 
 - `backend/`: API REST, autenticação JWT, regras de negócio e relatórios.
